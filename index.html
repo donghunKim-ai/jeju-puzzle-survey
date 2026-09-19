@@ -330,6 +330,10 @@ const QNUM = {};
     else { n++; QNUM[q.id] = n; }
   });
 })();
+/* 구글시트/DB에 저장될 때 쓰는 열 이름. 화면에 보이는 문항 번호(Q1, Q2 ...)와 그대로 일치시켜서
+   시트를 열었을 때 어떤 열이 몇 번 문항인지 바로 알아볼 수 있게 한다. */
+const QKEY = {};
+ALLQ.forEach(q=>{ QKEY[q.id] = 'Q' + QNUM[q.id]; });
 
 /* ---------- state ---------- */
 let state = { screen:'intro', step:0, answers:{}, other:{} };
@@ -491,8 +495,8 @@ function buildRecord(){
   const rec = { submittedAt:new Date().toISOString(), version:1, privacyConsent:true };
   ALLQ.forEach(q=>{
     let a = state.answers[q.id] ?? (q.type==='multi'?[]:'');
-    rec[q.id] = a;
-    if(q.other && state.other[q.id]) rec[q.id+'_other'] = state.other[q.id];
+    rec[QKEY[q.id]] = a;
+    if(q.other && state.other[q.id]) rec[QKEY[q.id]+'_other'] = state.other[q.id];
   });
   return rec;
 }
@@ -539,18 +543,18 @@ async function renderResults(){
   const n = rows.length;
   if(!n){ body.innerHTML='<p class="muted">아직 저장된 응답이 없어요. 설문 링크를 공유해보세요.</p>'; return; }
   const last = rows[0].submittedAt ? new Date(rows[0].submittedAt) : null;
-  let html = `<div class="stat"><div class="tile"><b>${n}</b><span>총 응답</span></div><div class="tile"><b>${last?last.toLocaleDateString('ko-KR',{month:'short',day:'numeric'}):'-'}</b><span>최근 응답</span></div><div class="tile"><b>${pick(rows,'q6')}</b><span>구매 1순위</span></div></div>`;
+  let html = `<div class="stat"><div class="tile"><b>${n}</b><span>총 응답</span></div><div class="tile"><b>${last?last.toLocaleDateString('ko-KR',{month:'short',day:'numeric'}):'-'}</b><span>최근 응답</span></div><div class="tile"><b>${pick(rows,QKEY['q6'])}</b><span>구매 1순위</span></div></div>`;
   ALLQ.forEach(q=>{
     if(q.type==='text'){
-      const items = rows.filter(r=>r[q.id] && String(r[q.id]).trim()).map(r=>`<li>${esc(r[q.id])}<small>${r.submittedAt?new Date(r.submittedAt).toLocaleString('ko-KR'):''}</small></li>`);
+      const items = rows.filter(r=>r[QKEY[q.id]] && String(r[QKEY[q.id]]).trim()).map(r=>`<li>${esc(r[QKEY[q.id]])}<small>${r.submittedAt?new Date(r.submittedAt).toLocaleString('ko-KR'):''}</small></li>`);
       html += `<div class="rq"><h3>Q${QNUM[q.id]}. ${q.text}</h3>${items.length?`<ul class="freetext">${items.join('')}</ul>`:'<p class="muted" style="margin:0;font-size:14px">아직 주관식 응답이 없어요.</p>'}</div>`;
       return;
     }
     const opts = q.type==='image' ? [...(q.choices? q.choices.map(c=>c.name) : PRODUCTS.map(p=>p.name)), ...(q.none?[q.none]:[])] : q.opts;
     const counts = Object.fromEntries(opts.map(o=>[o,0]));
-    rows.forEach(r=>{ const a=r[q.id]; (Array.isArray(a)?a:[a]).forEach(v=>{ if(v in counts) counts[v]++; }); });
+    rows.forEach(r=>{ const a=r[QKEY[q.id]]; (Array.isArray(a)?a:[a]).forEach(v=>{ if(v in counts) counts[v]++; }); });
     const max = Math.max(1,...Object.values(counts));
-    const others = q.other ? rows.map(r=>r[q.id+'_other']).filter(Boolean) : [];
+    const others = q.other ? rows.map(r=>r[QKEY[q.id]+'_other']).filter(Boolean) : [];
     html += `<div class="rq"><h3>Q${QNUM[q.id]}. ${q.text}</h3>${opts.map(o=>{const c=counts[o];const p=Math.round(c/n*100);return `<div class="bar"><div><div class="lab"><span>${o}</span><span>${c}명</span></div><div class="track"><i class="${c===max&&c>0?'top':''}" style="width:${c/max*100}%"></i></div></div><div class="pct">${p}%</div></div>`;}).join('')}${others.length?`<p class="muted" style="font-size:13px;margin:8px 0 0">기타: ${others.map(esc).join(' / ')}</p>`:''}</div>`;
   });
   body.innerHTML = html;
@@ -559,8 +563,8 @@ function pick(rows,qid){ const c={}; rows.forEach(r=>{ if(r[qid]) c[r[qid]]=(c[r
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 $('#btnCsv').addEventListener('click',async()=>{
   if(!lastRows.length){ toast('저장할 응답이 없어요'); return; }
-  const cols = ['submittedAt', ...ALLQ.flatMap(q=> q.other ? [q.id, q.id+'_other'] : [q.id])];
-  const head = cols.map(c=> c==='submittedAt'?'제출시각': (QNUM[c.replace('_other','')] ? `Q${QNUM[c.replace('_other','')]}${c.endsWith('_other')?'_기타':''}` : c));
+  const cols = ['submittedAt', ...ALLQ.flatMap(q=> q.other ? [QKEY[q.id], QKEY[q.id]+'_other'] : [QKEY[q.id]])];
+  const head = cols.map(c=> c==='submittedAt'?'제출시각': (c.endsWith('_other')?c.slice(0,-6)+'_기타':c));
   const line = arr => arr.map(v=>{ if(Array.isArray(v)) v=v.join(' | '); v = v==null?'':String(v); return `"${v.replace(/"/g,'""')}"`; }).join(',');
   const csv = '﻿' + [line(head), ...lastRows.map(r=>line(cols.map(c=>r[c])))].join('\n');
   if(dlNS){ try{ await dlNS.save({filename:'jeju-puzzle-survey.csv', data:csv}); toast('CSV를 저장했어요'); return; }catch(e){ if(e&&e.code==='cancelled') return; } }
