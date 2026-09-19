@@ -542,7 +542,7 @@ async function renderResults(){
   let html = `<div class="stat"><div class="tile"><b>${n}</b><span>총 응답</span></div><div class="tile"><b>${last?last.toLocaleDateString('ko-KR',{month:'short',day:'numeric'}):'-'}</b><span>최근 응답</span></div><div class="tile"><b>${pick(rows,'q6')}</b><span>구매 1순위</span></div></div>`;
   ALLQ.forEach(q=>{
     if(q.type==='text'){
-      const items = rows.filter(r=>r.q18 && String(r.q18).trim()).map(r=>`<li>${esc(r.q18)}<small>${r.submittedAt?new Date(r.submittedAt).toLocaleString('ko-KR'):''}</small></li>`);
+      const items = rows.filter(r=>r[q.id] && String(r[q.id]).trim()).map(r=>`<li>${esc(r[q.id])}<small>${r.submittedAt?new Date(r.submittedAt).toLocaleString('ko-KR'):''}</small></li>`);
       html += `<div class="rq"><h3>Q${QNUM[q.id]}. ${q.text}</h3>${items.length?`<ul class="freetext">${items.join('')}</ul>`:'<p class="muted" style="margin:0;font-size:14px">아직 주관식 응답이 없어요.</p>'}</div>`;
       return;
     }
